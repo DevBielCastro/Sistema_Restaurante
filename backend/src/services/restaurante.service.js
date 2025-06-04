@@ -1,93 +1,46 @@
 // backend/src/services/restaurante.service.js
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
-const { z } = require('zod'); // Importo o Zod
-// const format = require('pg-format'); // Considerar para formatação segura de identificadores em produção
+const { z } = require('zod'); // Presumindo que você ainda tem o Zod para o schema de restaurante
 
-// Defino o schema de validação para os dados de entrada de um novo restaurante
+// Schema Zod para o restaurante (ajuste conforme sua definição atual)
 const restauranteSchema = z.object({
-  identificador_url: z.string({
-    required_error: "O identificador_url é obrigatório.",
-    invalid_type_error: "O identificador_url deve ser um texto.",
-  })
-  .min(3, { message: "O identificador_url deve ter pelo menos 3 caracteres." })
-  .regex(/^[a-z0-9_]+$/, { message: "O identificador_url deve conter apenas letras minúsculas, números e underscores ('_')." }),
-
-  nome_fantasia: z.string({
-    required_error: "O nome_fantasia é obrigatório.",
-  })
-  .min(2, { message: "O nome_fantasia deve ter pelo menos 2 caracteres." }),
-
-  email_responsavel: z.string({
-    required_error: "O email_responsavel é obrigatório.",
-  })
-  .email({ message: "Formato de e-mail inválido para email_responsavel." }),
-
-  senha_responsavel: z.string({
-    required_error: "A senha_responsavel é obrigatória.",
-  })
-  .min(8, { message: "A senha_responsavel deve ter pelo menos 8 caracteres." }),
-
-  nome_schema_db: z.string({
-    required_error: "O nome_schema_db é obrigatório.",
-  })
-  .min(3, { message: "O nome_schema_db deve ter pelo menos 3 caracteres." })
-  .regex(/^[a-z0-9_]+$/, { message: "O nome_schema_db deve conter apenas letras minúsculas, números e underscores ('_')." }),
-
-  razao_social: z.string().min(2, { message: "A razão social deve ter pelo menos 2 caracteres." }).optional(),
-  cnpj: z.string()
-    .regex(/^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/, { message: "Formato de CNPJ inválido."})
-    .optional()
-    .nullable(),
-  endereco_completo: z.string().min(5, { message: "O endereço completo deve ter pelo menos 5 caracteres."}).optional(),
-  telefone_contato: z.string().min(8, { message: "O telefone de contato deve ter pelo menos 8 caracteres."}).optional(),
-  path_logo: z.string().url({ message: "O caminho da logo deve ser uma URL válida." }).optional().nullable(),
-  cor_primaria_hex: z.string()
-    .regex(/^#([0-9A-Fa-f]{3}){1,2}$/, { message: "Cor primária deve ser um código hexadecimal válido (ex: #RRGGBB ou #RGB)." })
-    .optional()
-    .nullable(),
-  cor_secundaria_hex: z.string()
-    .regex(/^#([0-9A-Fa-f]{3}){1,2}$/, { message: "Cor secundária deve ser um código hexadecimal válido (ex: #RRGGBB ou #RGB)." })
-    .optional()
-    .nullable(),
+  identificador_url: z.string().min(3).regex(/^[a-z0-9_]+$/),
+  nome_fantasia: z.string().min(2),
+  email_responsavel: z.string().email(),
+  senha_responsavel: z.string().min(8),
+  nome_schema_db: z.string().min(3).regex(/^[a-z0-9_]+$/),
+  razao_social: z.string().min(2).optional().nullable(),
+  cnpj: z.string().regex(/^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/, "Formato de CNPJ inválido.").optional().nullable(),
+  endereco_completo: z.string().min(5).optional().nullable(),
+  telefone_contato: z.string().min(8).optional().nullable(),
+  path_logo: z.string().url().optional().nullable(),
+  cor_primaria_hex: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/).optional().nullable(),
+  cor_secundaria_hex: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/).optional().nullable(),
 });
 
 
 const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
-  console.log('Service: Tentando criar restaurante com dados brutos:', dadosBrutosRestaurante);
+  console.log('Service Restaurante: Tentando criar restaurante com dados brutos:', dadosBrutosRestaurante);
 
   try {
-    // 1. Validar os dados de entrada usando o schema Zod.
-    //    Se a validação falhar, o Zod lançará um erro que será capturado pelo catch mais abaixo.
     const dadosRestaurante = restauranteSchema.parse(dadosBrutosRestaurante);
-    console.log('Service: Dados validados pelo Zod:', dadosRestaurante);
+    console.log('Service Restaurante: Dados validados pelo Zod:', dadosRestaurante);
 
-    // Desestruturo os dados validados para uso
     const {
-      identificador_url,
-      nome_fantasia,
-      email_responsavel,
-      senha_responsavel, // Senha em texto puro, validada
-      nome_schema_db,
-      razao_social,
-      cnpj,
-      endereco_completo,
-      telefone_contato,
-      path_logo,
-      cor_primaria_hex,
-      cor_secundaria_hex,
+      identificador_url, nome_fantasia, email_responsavel, senha_responsavel,
+      nome_schema_db, razao_social, cnpj, endereco_completo, telefone_contato,
+      path_logo, cor_primaria_hex, cor_secundaria_hex,
     } = dadosRestaurante;
 
-    const client = await db.pool.connect(); // Pego um cliente da pool para a transação
+    const client = await db.pool.connect();
 
     try {
-      await client.query('BEGIN'); // Inicio a transação
+      await client.query('BEGIN');
 
-      // 2. Hashear a senha do responsável
       const saltRounds = 10;
       const hash_senha_responsavel = await bcrypt.hash(senha_responsavel, saltRounds);
 
-      // 3. Inserir os dados do restaurante na tabela 'public.restaurantes'
       const queryInsertRestaurante = `
         INSERT INTO public.restaurantes (
           identificador_url, nome_fantasia, razao_social, cnpj,
@@ -101,123 +54,140 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
         endereco_completo, telefone_contato, path_logo, cor_primaria_hex,
         cor_secundaria_hex, nome_schema_db, email_responsavel, hash_senha_responsavel,
       ];
-
       const resultadoRestaurante = await client.query(queryInsertRestaurante, valuesInsertRestaurante);
       const novoRestaurante = resultadoRestaurante.rows[0];
 
       if (!novoRestaurante) {
-        throw new Error('Falha ao inserir os dados do restaurante na tabela principal, nenhum dado retornado.');
+        throw new Error('Falha ao inserir os dados do restaurante na tabela principal.');
       }
 
-      // 4. Criar o schema específico para este restaurante
       const queryCreateSchema = `CREATE SCHEMA IF NOT EXISTS "${nome_schema_db}";`;
       await client.query(queryCreateSchema);
 
-      // 5. Criar tabelas e funções dentro do novo schema
       await client.query(`SET search_path TO "${nome_schema_db}", public;`);
 
       const ddlTriggerFunction = `
         CREATE OR REPLACE FUNCTION atualizar_data_atualizacao_tenant_tables()
         RETURNS TRIGGER AS $$
-        BEGIN
-          NEW.data_atualizacao = NOW();
-          RETURN NEW;
-        END;
+        BEGIN NEW.data_atualizacao = NOW(); RETURN NEW; END;
         $$ LANGUAGE 'plpgsql';
       `;
       await client.query(ddlTriggerFunction);
 
       const ddlCategorias = `
         CREATE TABLE categorias (
-            id SERIAL PRIMARY KEY,
-            nome TEXT NOT NULL UNIQUE,
-            descricao TEXT,
-            ordem_exibicao INTEGER DEFAULT 0,
-            ativo BOOLEAN DEFAULT TRUE,
+            id SERIAL PRIMARY KEY, nome TEXT NOT NULL UNIQUE, descricao TEXT,
+            ordem_exibicao INTEGER DEFAULT 0, ativo BOOLEAN DEFAULT TRUE,
             data_criacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             data_atualizacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         COMMENT ON TABLE categorias IS 'Categorias dos produtos do cardápio de um restaurante específico.';
       `;
       await client.query(ddlCategorias);
-
       const ddlTriggerCategorias = `
         CREATE TRIGGER trg_categorias_data_atualizacao
-        BEFORE UPDATE ON categorias
-        FOR EACH ROW
+        BEFORE UPDATE ON categorias FOR EACH ROW
         EXECUTE FUNCTION atualizar_data_atualizacao_tenant_tables();
       `;
       await client.query(ddlTriggerCategorias);
 
       const ddlProdutos = `
         CREATE TABLE produtos (
-            id SERIAL PRIMARY KEY,
-            categoria_id INTEGER NOT NULL,
-            nome TEXT NOT NULL,
-            descricao TEXT,
-            preco NUMERIC(10, 2) NOT NULL,
-            url_foto TEXT,
-            ativo BOOLEAN DEFAULT TRUE,
-            ordem_exibicao INTEGER DEFAULT 0,
+            id SERIAL PRIMARY KEY, categoria_id INTEGER NOT NULL REFERENCES categorias(id) ON DELETE RESTRICT,
+            nome TEXT NOT NULL, descricao TEXT, preco NUMERIC(10, 2) NOT NULL,
+            url_foto TEXT, ativo BOOLEAN DEFAULT TRUE, ordem_exibicao INTEGER DEFAULT 0,
             data_criacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            data_atualizacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT fk_categoria
-                FOREIGN KEY(categoria_id) 
-                REFERENCES categorias(id)
-                ON DELETE RESTRICT 
+            data_atualizacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
-        COMMENT ON TABLE produtos IS 'Produtos do cardápio de um restaurante específico, vinculados a uma categoria.';
+        COMMENT ON TABLE produtos IS 'Produtos do cardápio, vinculados a uma categoria.';
         CREATE INDEX IF NOT EXISTS idx_produtos_categoria_id ON produtos(categoria_id);
         CREATE INDEX IF NOT EXISTS idx_produtos_nome ON produtos(nome);
       `;
       await client.query(ddlProdutos);
-
       const ddlTriggerProdutos = `
         CREATE TRIGGER trg_produtos_data_atualizacao
-        BEFORE UPDATE ON produtos
-        FOR EACH ROW
+        BEFORE UPDATE ON produtos FOR EACH ROW
         EXECUTE FUNCTION atualizar_data_atualizacao_tenant_tables();
       `;
       await client.query(ddlTriggerProdutos);
 
-      await client.query(`SET search_path TO public;`); // Restauro o search_path
+      // ---- INÍCIO DAS NOVAS ADIÇÕES: Tabelas de Promoção ----
+      const ddlPromocoes = `
+        CREATE TABLE promocoes (
+            id SERIAL PRIMARY KEY,
+            nome_promocao TEXT NOT NULL,
+            descricao_promocao TEXT,
+            tipo_promocao TEXT NOT NULL CHECK (tipo_promocao IN ('DESCONTO_PERCENTUAL_PRODUTO', 'PRECO_FIXO_PRODUTO', 'COMBO_PRECO_FIXO', 'LEVE_X_PAGUE_Y_PRODUTO')),
+            valor_desconto_percentual NUMERIC(5, 2) CHECK (valor_desconto_percentual IS NULL OR (valor_desconto_percentual > 0 AND valor_desconto_percentual <= 100)),
+            preco_promocional_combo NUMERIC(10, 2) CHECK (preco_promocional_combo IS NULL OR preco_promocional_combo > 0),
+            data_inicio TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            data_fim TIMESTAMP WITH TIME ZONE,
+            ativo BOOLEAN DEFAULT TRUE,
+            data_criacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            data_atualizacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        COMMENT ON TABLE promocoes IS 'Armazena as promoções oferecidas pelo restaurante.';
+        COMMENT ON COLUMN promocoes.tipo_promocao IS 'Tipo da promoção: DESCONTO_PERCENTUAL_PRODUTO, PRECO_FIXO_PRODUTO, COMBO_PRECO_FIXO, LEVE_X_PAGUE_Y_PRODUTO.';
+      `;
+      await client.query(ddlPromocoes);
 
-      await client.query('COMMIT'); // Confirmo todas as operações da transação
+      const ddlTriggerPromocoes = `
+        CREATE TRIGGER trg_promocoes_data_atualizacao
+        BEFORE UPDATE ON promocoes FOR EACH ROW
+        EXECUTE FUNCTION atualizar_data_atualizacao_tenant_tables();
+      `;
+      await client.query(ddlTriggerPromocoes);
 
-      console.log(`Service: Restaurante ID ${novoRestaurante.id}, Schema '${nome_schema_db}', e tabelas de cardápio criados com sucesso.`);
-      return novoRestaurante; // Retorno os dados básicos do restaurante criado.
+      const ddlPromocaoProdutos = `
+        CREATE TABLE promocao_produtos (
+            id SERIAL PRIMARY KEY,
+            promocao_id INTEGER NOT NULL REFERENCES promocoes(id) ON DELETE CASCADE,
+            produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+            quantidade_no_combo INTEGER DEFAULT 1 CHECK (quantidade_no_combo > 0),
+            preco_promocional_produto_individual NUMERIC(10, 2) CHECK (preco_promocional_produto_individual IS NULL OR preco_promocional_produto_individual >= 0),
+            data_criacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (promocao_id, produto_id)
+        );
+        COMMENT ON TABLE promocao_produtos IS 'Associa produtos a promoções específicas.';
+      `;
+      await client.query(ddlPromocaoProdutos);
+      // ---- FIM DAS NOVAS ADIÇÕES ----
 
-    } catch (dbError) { // Catch para erros da transação com o banco
-      if (client) {
-        await client.query('ROLLBACK'); // Desfaço as alterações se algo deu errado na transação
+      await client.query(`SET search_path TO public;`);
+      await client.query('COMMIT');
+
+      console.log(`Service Restaurante: Restaurante ID ${novoRestaurante.id}, Schema '${nome_schema_db}', e todas as tabelas (incluindo promoções) criados com sucesso.`);
+      return novoRestaurante;
+
+    } catch (dbError) {
+      if (client) { // Garanto que client existe antes de tentar rollback
+        await client.query('ROLLBACK');
       }
-      console.error('Service DB Error: Falha na transação (revertida):', dbError.message || dbError);
-      if (dbError.code === '23505') { // Violação de constraint UNIQUE do PostgreSQL
+      console.error('Service Restaurante DB Error: Falha na transação (revertida):', dbError.message || dbError);
+      if (dbError.code === '23505') {
         throw new Error(`Já existe um registro com algum dos valores únicos fornecidos. Detalhe: ${dbError.detail || dbError.message}`);
       }
       throw new Error(`Erro no banco de dados ao criar restaurante: ${dbError.message}`);
     } finally {
       if (client) {
-        client.release(); // Libero o cliente de volta para a pool, crucial
+        client.release();
       }
     }
-  } catch (validationError) { // Catch para erros de validação do Zod ou outros erros pré-transação
+  } catch (validationError) { // Catch para erros do Zod
     if (validationError instanceof z.ZodError) {
-      console.error('Service Validation Error:', validationError.issues);
-      // Formato os erros do Zod para serem mais amigáveis para o controller
+      console.error('Service Restaurante Validation Error:', validationError.issues);
       const formattedErrors = validationError.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
-      const error = new Error(`Erro de validação: ${formattedErrors}`);
-      error.isZodError = true; // Adiciono uma flag para o controller identificar
-      error.issues = validationError.issues; // Disponibilizo as issues originais se necessário
+      const error = new Error(`Erro de validação para restaurante: ${formattedErrors}`);
+      error.isZodError = true;
+      error.issues = validationError.issues;
       throw error;
     }
-    // Para outros tipos de erro que podem ocorrer antes de iniciar a transação
-    console.error('Service Error (pré-transação):', validationError.message || validationError);
+    console.error('Service Restaurante Error (pré-validação ou inesperado):', validationError.message || validationError);
     throw new Error(`Erro no serviço ao processar dados do restaurante: ${validationError.message}`);
   }
 };
 
 module.exports = {
   criarNovoRestaurante,
-  // TODO: Adicionar aqui os outros serviços relacionados a restaurantes.
+  // Outras funções de serviço de restaurante (listar, buscar por ID, etc.) viriam aqui.
 };
