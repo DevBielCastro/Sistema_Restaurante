@@ -46,22 +46,15 @@ const adicionarNovaPromocao = async (nomeSchemaDbDoRestaurante, dadosBrutosPromo
   console.log(`Service Promoções: Tentando criar nova promoção no schema '${nomeSchemaDbDoRestaurante}' com dados brutos:`, dadosBrutosPromocao);
 
   try {
-    // 1. Validar 'dadosBrutosPromocao' usando o schema Zod.
     const dadosPromocao = promocaoCreateSchema.parse(dadosBrutosPromocao);
     console.log(`Service Promoções: Dados validados pelo Zod:`, dadosPromocao);
 
     const {
-      nome_promocao,
-      descricao_promocao,
-      tipo_promocao,
-      valor_desconto_percentual,
-      preco_promocional_combo,
-      data_inicio, // Esta é uma string ISO validada
-      data_fim,    // Esta é uma string ISO validada ou null/undefined
-      ativo,       // Zod já aplicou o default se não veio
+      nome_promocao, descricao_promocao, tipo_promocao,
+      valor_desconto_percentual, preco_promocional_combo,
+      data_inicio, data_fim, ativo,
     } = dadosPromocao;
 
-    // 2. Construir a query SQL para inserir na tabela 'promocoes'
     const queryText = `
       INSERT INTO "${nomeSchemaDbDoRestaurante}".promocoes 
         (nome_promocao, descricao_promocao, tipo_promocao, valor_desconto_percentual, 
@@ -70,11 +63,6 @@ const adicionarNovaPromocao = async (nomeSchemaDbDoRestaurante, dadosBrutosPromo
         ($1, $2, $3, $4, $5, $6, $7, $8) 
       RETURNING *; 
     `;
-
-    // 3. Preparar o array de 'values'
-    // O driver 'pg' lida bem com strings de data no formato ISO para colunas TIMESTAMP WITH TIME ZONE.
-    // Campos opcionais (valor_desconto_percentual, preco_promocional_combo, descricao_promocao, data_fim)
-    // serão undefined se não enviados e Zod não tiver default. O driver pg converte undefined para NULL.
     const values = [
       nome_promocao,
       descricao_promocao,
@@ -86,7 +74,6 @@ const adicionarNovaPromocao = async (nomeSchemaDbDoRestaurante, dadosBrutosPromo
       ativo,
     ];
 
-    // 4. Executar a query
     const resultado = await db.query(queryText, values);
     const promocaoCriada = resultado.rows[0];
 
@@ -111,8 +98,7 @@ const adicionarNovaPromocao = async (nomeSchemaDbDoRestaurante, dadosBrutosPromo
       validationError.issues = error.issues;
       throw validationError;
     }
-    // TODO: Adicionar tratamento para UNIQUE constraint no nome_promocao se você adicionar essa constraint na tabela.
-    // Ex: if (error.code === '23505' && error.constraint === 'promocoes_nome_promocao_key') { ... }
+    // TODO: Adicionar tratamento para UNIQUE constraint no nome_promocao se necessário
     
     console.error(`Service Promoções Error (Criar):`, error.message || error);
     throw new Error(`Erro no serviço ao adicionar promoção: ${error.message}`);
@@ -135,8 +121,57 @@ const buscarPromocoesPorRestaurante = async (nomeSchemaDbDoRestaurante) => {
   }
 };
 
+// Função para buscar uma promoção específica por ID (AGORA IMPLEMENTADA)
+const buscarPromocaoPorId = async (nomeSchemaDbDoRestaurante, promocaoId) => {
+  // Log para desenvolvimento.
+  console.log(`Service Promoções: Buscando promoção ID '${promocaoId}' no schema '${nomeSchemaDbDoRestaurante}'`);
+
+  try {
+    // Converto promocaoId para inteiro para garantir.
+    const idPromocaoParaBuscar = parseInt(promocaoId, 10);
+    if (isNaN(idPromocaoParaBuscar)) {
+      const error = new Error("ID da promoção inválido. Deve ser um número.");
+      error.isValidationError = true; // Trato como erro de validação para o controller
+      throw error;
+    }
+
+    // Construo a query SQL para selecionar a promoção específica.
+    const queryText = `
+      SELECT * FROM "${nomeSchemaDbDoRestaurante}".promocoes 
+      WHERE id = $1; 
+    `;
+    // Não estamos fazendo JOIN com promocao_produtos aqui ainda.
+    // Isso pode ser uma melhoria futura se quisermos retornar os produtos do combo junto.
+    const values = [idPromocaoParaBuscar];
+
+    // Executo a query
+    const resultado = await db.query(queryText, values);
+
+    // Verifico se a promoção foi encontrada
+    if (resultado.rowCount === 0) {
+      // Se nenhuma linha foi retornada, a promoção com o ID fornecido não existe.
+      console.log(`Service Promoções: Promoção ID '${idPromocaoParaBuscar}' não encontrada no schema '${nomeSchemaDbDoRestaurante}'.`);
+      return null; // Retorno null para o controller tratar como 404.
+    }
+    
+    const promocaoEncontrada = resultado.rows[0];
+    console.log(`Service Promoções: Promoção ID ${promocaoEncontrada.id} ('${promocaoEncontrada.nome_promocao}') encontrada com sucesso no schema '${nomeSchemaDbDoRestaurante}'.`);
+    return promocaoEncontrada; // Retorno a promoção encontrada
+
+  } catch (error) {
+    // Se o erro já é uma validação que fizemos (ID inválido)
+    if (error.isValidationError) {
+        throw error;
+    }
+    // Para outros erros do banco ou inesperados
+    console.error(`Service Promoções Error (Buscar por ID): Falha ao buscar promoção ID '${promocaoId}' no schema '${nomeSchemaDbDoRestaurante}':`, error.message || error);
+    throw new Error(`Erro no serviço ao buscar promoção por ID: ${error.message}`);
+  }
+};
+
 module.exports = {
   adicionarNovaPromocao,
   buscarPromocoesPorRestaurante,
-  // TODO: Adicionar outros serviços para promoções (buscar por ID, atualizar, deletar)
+  buscarPromocaoPorId, // Função agora implementada e exportada
+  // TODO: Adicionar outros serviços para promoções (atualizar, deletar, associar produtos)
 };

@@ -27,14 +27,12 @@ const criarPromocao = async (req, res) => {
     console.error('Controller Promoção (Criar) Error:', error.message);
 
     if (error.isZodError) {
-      // A error.message já vem formatada do service
       const details = error.issues ? error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') : error.message;
       return res.status(400).json({ 
         message: "Dados inválidos para a promoção.", 
         details: details
       });
     } 
-    // TODO: Tratar outros erros específicos que o service possa lançar (ex: nome duplicado)
     else {
       return res.status(500).json({ message: 'Erro interno no servidor ao tentar criar a promoção.' });
     }
@@ -66,8 +64,46 @@ const listarPromocoes = async (req, res) => {
   }
 };
 
+// Nova função para obter uma promoção específica por ID (esqueleto)
+const obterPromocaoPorId = async (req, res) => {
+  try {
+    const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
+    const restauranteAutenticado = req.restauranteAutenticado;
+
+    // Log para desenvolvimento
+    console.log(`Controller Promoção: Obtendo promoção ID '${promocaoId}' para restauranteId (URL): ${restauranteIdDaUrl}`);
+
+    // Verificação de Autorização
+    if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
+      console.warn(`Controller Promoção: Tentativa de OBTER promoção não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
+      return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para acessar promoções deste restaurante.' });
+    }
+
+    // TODO: Chamar promocaoService.buscarPromocaoPorId(restauranteAutenticado.nomeSchemaDb, parseInt(promocaoId, 10));
+    // const promocao = await promocaoService.buscarPromocaoPorId(restauranteAutenticado.nomeSchemaDb, parseInt(promocaoId, 10));
+    // if (!promocao) {
+    //   return res.status(404).json({ message: 'Promoção não encontrada.' });
+    // }
+    // res.status(200).json(promocao);
+
+    // Resposta provisória
+    res.status(200).json({
+      message: 'Controller: Lógica para OBTER promoção por ID a ser implementada no service.',
+      restauranteIdDaUrl,
+      promocaoId,
+      infoDoToken: restauranteAutenticado 
+    });
+
+  } catch (error) {
+    console.error('Controller Promoção (Obter por ID) Error:', error.message);
+    // TODO: Adicionar tratamento para erros específicos vindos do service (ex: promocaoId inválido)
+    res.status(500).json({ message: 'Erro interno ao tentar obter a promoção.' });
+  }
+};
+
 module.exports = {
   criarPromocao,
   listarPromocoes,
-  // TODO: Adicionar outras funções de controller para promoções
+  obterPromocaoPorId, // Adicionada a nova função aos exports
+  // TODO: Adicionar outras funções de controller para promoções (atualizar, deletar)
 };
