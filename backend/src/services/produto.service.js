@@ -309,28 +309,25 @@ const modificarProduto = async (nomeSchemaDbDoRestaurante, produtoId, dadosBruto
     return produtoAtualizado;
 
   } catch (error) {
-    if (error instanceof z.ZodError) { // Erro vindo do parse do Zod
-      console.error('Service Produto Validation Error (Modificar - Zod Instance):', error.issues);
+    if (error instanceof z.ZodError) {
+      console.error('Service Produto Validation Error (Modificar):', error.issues);
       const formattedErrors = error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
       const validationError = new Error(`Erro de validação para atualização do produto: ${formattedErrors}`);
       validationError.isZodError = true;
-      validationError.issues = error.issues; // Preserva as issues originais
+      validationError.issues = error.issues;
       throw validationError;
     }
-    // Verifica outras flags customizadas que podemos ter setado antes de ser um ZodError real
-    if (error.isValidationError || error.isForeignKeyConstraint || error.isNotFoundError || error.isZodError /* para nosso erro customizado de "nenhum dado" */) {
+    if (error.isValidationError || error.isForeignKeyConstraint || error.isNotFoundError || error.isZodError) {
         console.error(`Service Produto Error (Modificar - Erro Sinalizado):`, error.message);
         throw error; 
     }
     
-    // TODO: Adicionar tratamento para constraint de nome de produto duplicado, se houver.
-    
-    console.error(`Service Produto Error (Modificar - Genérico): Falha ao modificar produto ID '${produtoId}' no schema '${nomeSchemaDbDoRestaurante}':`, error.message || error);
+    console.error(`Service Produto Error (Modificar - Genérico): Falha ao modificar produto ID '${produtoId}':`, error.message || error);
     throw new Error(`Erro no serviço ao modificar produto: ${error.message}`);
   }
 };
 
-// Função para remover um produto existente (IMPLEMENTADA)
+// Função para remover um produto existente (AGORA IMPLEMENTADA COM LÓGICA DE BANCO)
 const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
   console.log(`Service Produto: Removendo produto ID '${produtoId}' do schema '${nomeSchemaDbDoRestaurante}'`);
 
@@ -338,14 +335,14 @@ const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
     const idProdutoParaDeletar = parseInt(produtoId, 10);
     if (isNaN(idProdutoParaDeletar)) {
       const error = new Error("ID do produto inválido para deleção. Deve ser um número.");
-      error.isValidationError = true;
+      error.isValidationError = true; // Para o controller tratar como 400
       throw error;
     }
 
     const queryText = `
       DELETE FROM "${nomeSchemaDbDoRestaurante}".produtos 
       WHERE id = $1
-      RETURNING id; 
+      RETURNING id; // Usar RETURNING id para verificar o rowCount
     `;
     const values = [idProdutoParaDeletar];
 
@@ -353,7 +350,7 @@ const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
 
     if (resultado.rowCount === 0) {
       const error = new Error(`Produto com ID '${idProdutoParaDeletar}' não encontrado no schema '${nomeSchemaDbDoRestaurante}' para deleção.`);
-      error.isNotFoundError = true;
+      error.isNotFoundError = true; // Para o controller tratar como 404
       throw error;
     }
 
@@ -362,11 +359,19 @@ const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
 
   } catch (error) {
     if (error.isValidationError || error.isNotFoundError) {
-        throw error;
+        throw error; // Relança erros já sinalizados
     }
-    // Não esperamos violação de FK ao deletar produto, a menos que outra tabela o referencie.
+    // Produtos geralmente não quebram FKs de outras tabelas ao serem deletados,
+    // a menos que você tenha, por exemplo, 'itens_pedido' referenciando-os com ON DELETE RESTRICT.
+    // Se isso ocorrer, o error.code seria '23503'.
+    if (error.code === '23503') { // foreign_key_violation
+        console.error(`Service Produto DB Error (Remover): Tentativa de deletar produto ID '${produtoId}' que possui dependências.`);
+        const fkError = new Error('Este produto não pode ser deletado, pois está referenciado em outros lugares (ex: em pedidos).');
+        fkError.isForeignKeyViolation = true; // Flag para o controller
+        throw fkError;
+    }
     
-    console.error(`Service Produto Error (Remover): Falha ao remover produto ID '${produtoId}' no schema '${nomeSchemaDbDoRestaurante}':`, error.message || error);
+    console.error(`Service Produto Error (Remover): Falha ao remover produto ID '${produtoId}':`, error.message || error);
     throw new Error(`Erro no serviço ao remover produto: ${error.message}`);
   }
 };

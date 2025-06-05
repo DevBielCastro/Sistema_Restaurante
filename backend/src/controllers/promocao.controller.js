@@ -9,13 +9,11 @@ const criarPromocao = async (req, res) => {
 
     console.log(`Controller Promoção: Tentando criar promoção para restauranteId (URL): ${restauranteIdDaUrl}`);
 
-    // Verificação de Autorização
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa NÃO AUTORIZADA de criar promoção. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para criar promoções para este restaurante.' });
     }
 
-    // Chamo o serviço para adicionar a nova promoção.
     const promocaoCriada = await promocaoService.adicionarNovaPromocao(
         restauranteAutenticado.nomeSchemaDb, 
         dadosNovaPromocao
@@ -25,16 +23,13 @@ const criarPromocao = async (req, res) => {
 
   } catch (error) {
     console.error('Controller Promoção (Criar) Error:', error.message);
-
     if (error.isZodError) {
-      // A error.message já vem formatada do service
       const details = error.issues ? error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') : error.message;
       return res.status(400).json({ 
         message: "Dados inválidos para a promoção.", 
         details: details
       });
     } 
-    // TODO: Tratar outros erros específicos que o service possa lançar (ex: nome duplicado)
     else {
       return res.status(500).json({ message: 'Erro interno no servidor ao tentar criar a promoção.' });
     }
@@ -46,18 +41,14 @@ const listarPromocoes = async (req, res) => {
     const { restauranteId: restauranteIdDaUrl } = req.params;
     const restauranteAutenticado = req.restauranteAutenticado;
 
-    // Log para desenvolvimento
     console.log(`Controller Promoção: Listando promoções para restauranteId (URL): ${restauranteIdDaUrl}`);
 
-    // Verificação de Autorização
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa de LISTAR promoções não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para listar promoções deste restaurante.' });
     }
 
-    // Chamo o serviço para buscar as promoções
     const promocoes = await promocaoService.buscarPromocoesPorRestaurante(restauranteAutenticado.nomeSchemaDb);
-    
     res.status(200).json(promocoes);
 
   } catch (error) {
@@ -66,55 +57,153 @@ const listarPromocoes = async (req, res) => {
   }
 };
 
-// Função para obter uma promoção específica por ID (AGORA CHAMA O SERVICE REAL)
 const obterPromocaoPorId = async (req, res) => {
   try {
     const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
     const restauranteAutenticado = req.restauranteAutenticado;
 
-    // Log para desenvolvimento
     console.log(`Controller Promoção: Obtendo promoção ID '${promocaoId}' para restauranteId (URL): ${restauranteIdDaUrl}`);
 
-    // Verificação de Autorização
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa de OBTER promoção não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para acessar promoções deste restaurante.' });
     }
 
-    // Chamo o serviço para buscar a promoção por ID.
     const promocao = await promocaoService.buscarPromocaoPorId(
         restauranteAutenticado.nomeSchemaDb, 
-        promocaoId // O serviço fará o parseInt e validação do promocaoId
+        promocaoId
     );
 
-    // Verifico se a promoção foi encontrada pelo serviço
     if (!promocao) {
-      // Se o serviço retornou null, significa que a promoção não foi encontrada.
       return res.status(404).json({ message: `Promoção com ID '${promocaoId}' não encontrada neste restaurante.` });
     }
     
-    // Se a promoção foi encontrada, retorno com status 200 OK.
     res.status(200).json(promocao);
 
   } catch (error) {
-    // Log do erro no console do backend
     console.error('Controller Promoção (Obter por ID) Error:', error.message);
-
-    // Verifico o tipo de erro para dar uma resposta HTTP apropriada
-    if (error.isValidationError) { // Flag que definimos no service para ID de promoção inválido
+    if (error.isValidationError) { 
         return res.status(400).json({ message: error.message });
     } 
-    // O service já retorna null para "não encontrado", que tratamos acima.
-    // Outros erros podem ser erros de banco de dados ou inesperados.
     else {
       return res.status(500).json({ message: 'Erro interno no servidor ao tentar obter a promoção.' });
     }
   }
 };
 
+const atualizarPromocao = async (req, res) => {
+  try {
+    const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
+    const dadosUpdatePromocao = req.body;
+    const restauranteAutenticado = req.restauranteAutenticado;
+
+    console.log(`Controller Promoção: Atualizando promoção ID '${promocaoId}' para restauranteId (URL): ${restauranteIdDaUrl}`);
+
+    if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
+      console.warn(`Controller Promoção: Tentativa de ATUALIZAR promoção não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
+      return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para modificar promoções deste restaurante.' });
+    }
+
+    const promocaoAtualizada = await promocaoService.modificarPromocao(
+        restauranteAutenticado.nomeSchemaDb, 
+        parseInt(promocaoId, 10),
+        dadosUpdatePromocao
+    );
+    
+    res.status(200).json(promocaoAtualizada);
+
+  } catch (error) {
+    console.error('Controller Promoção (Atualizar) Error:', error.message);
+    if (error.isZodError) { 
+      const details = error.issues ? error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') : undefined;
+      const message = error.message.startsWith("Erro de validação") || error.message.startsWith("Nenhum dado válido") 
+                      ? error.message 
+                      : "Dados inválidos para atualização da promoção.";
+      return res.status(400).json({ message: message, details: details });
+    } else if (error.isForeignKeyConstraint) { 
+      return res.status(400).json({ message: error.message });
+    } else if (error.isNotFoundError) { 
+      return res.status(404).json({ message: error.message });
+    } else if (error.isValidationError) { 
+        return res.status(400).json({ message: error.message });
+    }
+    else {
+      return res.status(500).json({ message: 'Erro interno no servidor ao tentar atualizar a promoção.' });
+    }
+  }
+};
+
+const deletarPromocao = async (req, res) => {
+  try {
+    const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
+    const restauranteAutenticado = req.restauranteAutenticado;
+
+    console.log(`Controller Promoção: Deletando promoção ID '${promocaoId}' do restauranteId (URL): ${restauranteIdDaUrl}`);
+
+    if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
+      console.warn(`Controller Promoção: Tentativa de DELETAR promoção não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
+      return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para deletar promoções deste restaurante.' });
+    }
+
+    await promocaoService.removerPromocao(
+        restauranteAutenticado.nomeSchemaDb, 
+        parseInt(promocaoId, 10)
+    );
+    
+    res.status(204).send();
+
+  } catch (error) {
+    console.error('Controller Promoção (Deletar) Error:', error.message);
+    if (error.isValidationError) {
+        return res.status(400).json({ message: error.message });
+    } else if (error.isNotFoundError) {
+        return res.status(404).json({ message: error.message });
+    } else if (error.isForeignKeyViolation) {
+        return res.status(409).json({ message: error.message }); 
+    } else {
+      return res.status(500).json({ message: 'Erro interno ao tentar deletar a promoção.' });
+    }
+  }
+};
+
+// Esqueleto da função para adicionar produto à promoção
+const adicionarProdutoNaPromocao = async (req, res) => {
+  try {
+    const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
+    const dadosVinculoProduto = req.body; 
+    const restauranteAutenticado = req.restauranteAutenticado;
+
+    console.log(`Controller Promoção: Adicionando produto à promoção ID '${promocaoId}' do restauranteId (URL): ${restauranteIdDaUrl}`);
+    console.log(`Controller Promoção: Dados do vínculo do produto:`, dadosVinculoProduto);
+
+    if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
+      console.warn(`Controller Promoção: Tentativa NÃO AUTORIZADA de adicionar produto à promoção. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
+      return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para modificar esta promoção.' });
+    }
+
+    // TODO: Chamar promocaoService.vincularProdutoAPromocao(...)
+    // const vinculoCriado = await promocaoService.vincularProdutoAPromocao(restauranteAutenticado.nomeSchemaDb, parseInt(promocaoId, 10), dadosVinculoProduto);
+    // res.status(201).json(vinculoCriado);
+
+    // Resposta provisória
+    res.status(201).json({ 
+      message: 'Controller: Lógica para ADICIONAR PRODUTO À PROMOÇÃO a ser implementada no service.',
+      promocaoId,
+      dadosRecebidos: dadosVinculoProduto,
+    });
+
+  } catch (error) {
+    console.error('Controller Promoção (Adicionar Produto) Error:', error.message);
+    res.status(500).json({ message: 'Erro interno ao tentar adicionar produto à promoção.' });
+  }
+};
+
+
 module.exports = {
   criarPromocao,
   listarPromocoes,
   obterPromocaoPorId,
-  // TODO: Adicionar outras funções de controller para promoções (atualizar, deletar)
+  atualizarPromocao,
+  deletarPromocao,
+  adicionarProdutoNaPromocao, // Garanta que esta também está exportada
 };
