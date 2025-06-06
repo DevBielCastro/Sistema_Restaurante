@@ -1,9 +1,9 @@
 // backend/src/services/restaurante.service.js
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
-const { z } = require('zod'); // Presumindo que você ainda tem o Zod para o schema de restaurante
+const { z } = require('zod');
 
-// Schema Zod para o restaurante (ajuste conforme sua definição atual)
+// Schema Zod para o restaurante
 const restauranteSchema = z.object({
   identificador_url: z.string().min(3).regex(/^[a-z0-9_]+$/),
   nome_fantasia: z.string().min(2),
@@ -111,7 +111,6 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
       `;
       await client.query(ddlTriggerProdutos);
 
-      // ---- INÍCIO DAS NOVAS ADIÇÕES: Tabelas de Promoção ----
       const ddlPromocoes = `
         CREATE TABLE promocoes (
             id SERIAL PRIMARY KEY,
@@ -142,7 +141,7 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
         CREATE TABLE promocao_produtos (
             id SERIAL PRIMARY KEY,
             promocao_id INTEGER NOT NULL REFERENCES promocoes(id) ON DELETE CASCADE,
-            produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+            produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE RESTRICT,
             quantidade_no_combo INTEGER DEFAULT 1 CHECK (quantidade_no_combo > 0),
             preco_promocional_produto_individual NUMERIC(10, 2) CHECK (preco_promocional_produto_individual IS NULL OR preco_promocional_produto_individual >= 0),
             data_criacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -151,8 +150,7 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
         COMMENT ON TABLE promocao_produtos IS 'Associa produtos a promoções específicas.';
       `;
       await client.query(ddlPromocaoProdutos);
-      // ---- FIM DAS NOVAS ADIÇÕES ----
-
+      
       await client.query(`SET search_path TO public;`);
       await client.query('COMMIT');
 
@@ -160,7 +158,7 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
       return novoRestaurante;
 
     } catch (dbError) {
-      if (client) { // Garanto que client existe antes de tentar rollback
+      if (client) {
         await client.query('ROLLBACK');
       }
       console.error('Service Restaurante DB Error: Falha na transação (revertida):', dbError.message || dbError);
@@ -173,7 +171,7 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
         client.release();
       }
     }
-  } catch (validationError) { // Catch para erros do Zod
+  } catch (validationError) {
     if (validationError instanceof z.ZodError) {
       console.error('Service Restaurante Validation Error:', validationError.issues);
       const formattedErrors = validationError.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
@@ -189,5 +187,4 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
 
 module.exports = {
   criarNovoRestaurante,
-  // Outras funções de serviço de restaurante (listar, buscar por ID, etc.) viriam aqui.
 };

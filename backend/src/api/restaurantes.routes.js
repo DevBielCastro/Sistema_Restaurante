@@ -33,7 +33,8 @@ router.delete('/:restauranteId/promocoes/:promocaoId', protegerRota, promocaoCon
 // POST para adicionar um produto a uma promoção específica
 router.post('/:restauranteId/promocoes/:promocaoId/produtos', protegerRota, promocaoController.adicionarProdutoNaPromocao);
 
-// TODO: Rotas para remover/atualizar produtos de uma promoção
-// router.delete('/:restauranteId/promocoes/:promocaoId/produtos/:promocaoProdutoId', protegerRota, promocaoController.removerProdutoDaPromocao);
+// DELETE para remover um produto de uma promoção específica // <<<--- IMPLEMENTAÇÃO ADICIONADA
+router.delete('/:restauranteId/promocoes/:promocaoId/produtos/:produtoId', protegerRota, promocaoController.removerProdutoDaPromocao);
+
 
 module.exports = router;

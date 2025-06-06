@@ -7,8 +7,6 @@ const criarPromocao = async (req, res) => {
     const dadosNovaPromocao = req.body;
     const restauranteAutenticado = req.restauranteAutenticado;
 
-    console.log(`Controller Promoção: Tentando criar promoção para restauranteId (URL): ${restauranteIdDaUrl}`);
-
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa NÃO AUTORIZADA de criar promoção. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para criar promoções para este restaurante.' });
@@ -41,8 +39,6 @@ const listarPromocoes = async (req, res) => {
     const { restauranteId: restauranteIdDaUrl } = req.params;
     const restauranteAutenticado = req.restauranteAutenticado;
 
-    console.log(`Controller Promoção: Listando promoções para restauranteId (URL): ${restauranteIdDaUrl}`);
-
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa de LISTAR promoções não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para listar promoções deste restaurante.' });
@@ -61,8 +57,6 @@ const obterPromocaoPorId = async (req, res) => {
   try {
     const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
     const restauranteAutenticado = req.restauranteAutenticado;
-
-    console.log(`Controller Promoção: Obtendo promoção ID '${promocaoId}' para restauranteId (URL): ${restauranteIdDaUrl}`);
 
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa de OBTER promoção não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
@@ -96,8 +90,6 @@ const atualizarPromocao = async (req, res) => {
     const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
     const dadosUpdatePromocao = req.body;
     const restauranteAutenticado = req.restauranteAutenticado;
-
-    console.log(`Controller Promoção: Atualizando promoção ID '${promocaoId}' para restauranteId (URL): ${restauranteIdDaUrl}`);
 
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa de ATUALIZAR promoção não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
@@ -138,8 +130,6 @@ const deletarPromocao = async (req, res) => {
     const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
     const restauranteAutenticado = req.restauranteAutenticado;
 
-    console.log(`Controller Promoção: Deletando promoção ID '${promocaoId}' do restauranteId (URL): ${restauranteIdDaUrl}`);
-
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Promoção: Tentativa de DELETAR promoção não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para deletar promoções deste restaurante.' });
@@ -161,12 +151,11 @@ const deletarPromocao = async (req, res) => {
     } else if (error.isForeignKeyViolation) {
         return res.status(409).json({ message: error.message }); 
     } else {
-      return res.status(500).json({ message: 'Erro interno ao tentar deletar a promoção.' });
+      return res.status(500).json({ message: 'Erro interno no servidor ao tentar deletar a promoção.' });
     }
   }
 };
 
-// Esqueleto da função para adicionar produto à promoção
 const adicionarProdutoNaPromocao = async (req, res) => {
   try {
     const { restauranteId: restauranteIdDaUrl, promocaoId } = req.params;
@@ -181,20 +170,63 @@ const adicionarProdutoNaPromocao = async (req, res) => {
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para modificar esta promoção.' });
     }
 
-    // TODO: Chamar promocaoService.vincularProdutoAPromocao(...)
-    // const vinculoCriado = await promocaoService.vincularProdutoAPromocao(restauranteAutenticado.nomeSchemaDb, parseInt(promocaoId, 10), dadosVinculoProduto);
-    // res.status(201).json(vinculoCriado);
-
-    // Resposta provisória
-    res.status(201).json({ 
-      message: 'Controller: Lógica para ADICIONAR PRODUTO À PROMOÇÃO a ser implementada no service.',
-      promocaoId,
-      dadosRecebidos: dadosVinculoProduto,
-    });
+    const vinculoCriado = await promocaoService.vincularProdutoAPromocao(
+      restauranteAutenticado.nomeSchemaDb, 
+      parseInt(promocaoId, 10), 
+      dadosVinculoProduto
+    );
+    
+    res.status(201).json(vinculoCriado);
 
   } catch (error) {
     console.error('Controller Promoção (Adicionar Produto) Error:', error.message);
-    res.status(500).json({ message: 'Erro interno ao tentar adicionar produto à promoção.' });
+    
+    if (error.isZodError) {
+        const details = error.issues ? error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') : undefined;
+        return res.status(400).json({ message: "Dados inválidos para vincular produto.", details });
+    } else if (error.isValidationError || error.isBusinessLogicError || error.isForeignKeyConstraint) {
+        return res.status(400).json({ message: error.message });
+    } else if (error.isNotFoundError || error.isReferencedResourceNotFound) {
+        return res.status(404).json({ message: error.message });
+    } else if (error.isConflictError) {
+        return res.status(409).json({ message: error.message });
+    } else {
+        return res.status(500).json({ message: 'Erro interno ao tentar adicionar produto à promoção.' });
+    }
+  }
+};
+
+const removerProdutoDaPromocao = async (req, res) => {
+  try {
+    const { restauranteId: restauranteIdDaUrl, promocaoId, produtoId } = req.params;
+    const restauranteAutenticado = req.restauranteAutenticado;
+
+    console.log(`Controller Promoção: Removendo produto ID '${produtoId}' da promoção ID '${promocaoId}' do restauranteId (URL): ${restauranteIdDaUrl}`);
+
+    if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
+      console.warn(`Controller Promoção: Tentativa NÃO AUTORIZADA de remover produto da promoção. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
+      return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para modificar esta promoção.' });
+    }
+
+    // AQUI ESTÁ A CORREÇÃO:
+    await promocaoService.removerProdutoDaPromocao(
+      restauranteAutenticado.nomeSchemaDb,
+      parseInt(promocaoId, 10),
+      parseInt(produtoId, 10)
+    );
+    
+    res.status(204).send();
+
+  } catch (error) {
+    console.error('Controller Promoção (Remover Produto) Error:', error.message);
+
+    if (error.isValidationError) {
+        return res.status(400).json({ message: error.message });
+    } else if (error.isNotFoundError) {
+        return res.status(404).json({ message: error.message });
+    } else {
+      return res.status(500).json({ message: 'Erro interno ao tentar remover produto da promoção.' });
+    }
   }
 };
 
@@ -205,5 +237,6 @@ module.exports = {
   obterPromocaoPorId,
   atualizarPromocao,
   deletarPromocao,
-  adicionarProdutoNaPromocao, // Garanta que esta também está exportada
+  adicionarProdutoNaPromocao,
+  removerProdutoDaPromocao,
 };
