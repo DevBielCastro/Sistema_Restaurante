@@ -207,8 +207,7 @@ const removerProdutoDaPromocao = async (req, res) => {
       console.warn(`Controller Promoção: Tentativa NÃO AUTORIZADA de remover produto da promoção. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para modificar esta promoção.' });
     }
-
-    // AQUI ESTÁ A CORREÇÃO:
+    
     await promocaoService.removerProdutoDaPromocao(
       restauranteAutenticado.nomeSchemaDb,
       parseInt(promocaoId, 10),
@@ -231,6 +230,28 @@ const removerProdutoDaPromocao = async (req, res) => {
 };
 
 
+const listarProdutosDaPromocao = async (req, res) => {
+  try {
+    const { promocaoId } = req.params;
+    // CORREÇÃO: Obter o schema do objeto 'restauranteAutenticado', que é injetado pelo middleware.
+    const nomeSchema = req.restauranteAutenticado.nomeSchemaDb; 
+
+    // Medida de segurança para garantir que o schema foi obtido
+    if (!nomeSchema) {
+      return res.status(403).json({ message: "Informação do restaurante não encontrada no token." });
+    }
+
+    const produtos = await promocaoService.listarProdutosDaPromocao(nomeSchema, promocaoId);
+    
+    res.status(200).json(produtos);
+
+  } catch (error) {
+    console.error(`Controller (Listar Produtos da Promoção) Error:`, error.message);
+    res.status(500).json({ message: 'Erro interno ao buscar os produtos da promoção.' });
+  }
+};
+
+
 module.exports = {
   criarPromocao,
   listarPromocoes,
@@ -239,4 +260,5 @@ module.exports = {
   deletarPromocao,
   adicionarProdutoNaPromocao,
   removerProdutoDaPromocao,
+  listarProdutosDaPromocao,
 };

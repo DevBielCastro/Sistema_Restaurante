@@ -340,14 +340,6 @@ const vincularProdutoAPromocao = async (nomeSchemaDbDoRestaurante, promocaoIdPar
   }
 };
 
-/**
- * Desvincula um produto de uma promoção específica.
- * @param {string} nomeSchemaDbDoRestaurante - O nome do schema do banco de dados do restaurante.
- * @param {string|number} promocaoId - O ID da promoção da qual o produto será desvinculado.
- * @param {string|number} produtoId - O ID do produto a ser desvinculado.
- * @returns {Promise<object>} Uma mensagem de sucesso.
- * @throws {Error} Lança um erro se os IDs forem inválidos, se o vínculo não for encontrado ou se ocorrer um erro no banco de dados.
- */
 const removerProdutoDaPromocao = async (nomeSchemaDbDoRestaurante, promocaoId, produtoId) => {
   console.log(`Service Promoções: Desvinculando produto ID '${produtoId}' da promoção ID '${promocaoId}'...`);
   try {
@@ -387,6 +379,40 @@ const removerProdutoDaPromocao = async (nomeSchemaDbDoRestaurante, promocaoId, p
 };
 
 
+// NOVA FUNÇÃO PARA LISTAR OS PRODUTOS DE UMA PROMOÇÃO <<<--- ADIÇÃO
+const listarProdutosDaPromocao = async (nomeSchemaDbDoRestaurante, promocaoId) => {
+  console.log(`Service: Listando produtos para a promoção ID '${promocaoId}' no schema '${nomeSchemaDbDoRestaurante}'...`);
+  try {
+    const idPromocao = parseInt(promocaoId, 10);
+    if (isNaN(idPromocao)) {
+      throw new Error("ID da promoção inválido.");
+    }
+
+    // Query que junta a tabela de vínculo (promocao_produtos) com a de produtos (produtos)
+    // para trazer os detalhes dos produtos que pertencem à promoção.
+    const queryText = `
+      SELECT 
+        p.id, 
+        p.nome, 
+        p.preco,
+        pp.id AS vinculo_id, -- ID da tabela de ligação, útil para remoção no frontend
+        pp.quantidade_no_combo, 
+        pp.preco_promocional_produto_individual
+      FROM "${nomeSchemaDbDoRestaurante}".promocao_produtos pp
+      JOIN "${nomeSchemaDbDoRestaurante}".produtos p ON pp.produto_id = p.id
+      WHERE pp.promocao_id = $1
+      ORDER BY p.nome ASC;
+    `;
+    const resultado = await db.query(queryText, [idPromocao]);
+    return resultado.rows;
+
+  } catch (error) {
+    console.error(`Service Error (Listar Produtos da Promoção):`, error.message);
+    throw new Error(`Erro no serviço ao listar produtos da promoção.`);
+  }
+};
+
+
 module.exports = {
   adicionarNovaPromocao,
   buscarPromocoesPorRestaurante,
@@ -394,5 +420,6 @@ module.exports = {
   modificarPromocao,
   removerPromocao,
   vincularProdutoAPromocao,
-  removerProdutoDaPromocao, // <-- Função adicionada e exportada
+  removerProdutoDaPromocao,
+  listarProdutosDaPromocao, // <<<--- EXPORTAÇÃO DA NOVA FUNÇÃO
 };

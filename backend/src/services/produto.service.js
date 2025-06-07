@@ -191,7 +191,6 @@ const modificarProduto = async (nomeSchemaDbDoRestaurante, produtoId, dadosBruto
   }
 };
 
-// Função para remover um produto existente (COM LÓGICA DE BANCO E VERIFICAÇÃO DE PROMOÇÃO)
 const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
   console.log(`Service Produto: Removendo produto ID '${produtoId}' do schema '${nomeSchemaDbDoRestaurante}'`);
   try {
@@ -201,8 +200,6 @@ const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
       error.isValidationError = true;
       throw error;
     }
-
-    // Verifico se o produto está associado a alguma promoção na tabela promocao_produtos.
     const queryVerificaPromocaoProdutos = `
       SELECT COUNT(*) AS count FROM "${nomeSchemaDbDoRestaurante}".promocao_produtos 
       WHERE produto_id = $1;
@@ -210,10 +207,9 @@ const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
     const resultadoPromocaoProdutos = await db.query(queryVerificaPromocaoProdutos, [idProdutoParaDeletar]);
     if (parseInt(resultadoPromocaoProdutos.rows[0].count, 10) > 0) {
       const error = new Error('Este produto não pode ser deletado, pois está associado a uma ou mais promoções. Remova-o das promoções primeiro.');
-      error.isForeignKeyViolation = true; // Usando esta flag para o controller
+      error.isForeignKeyViolation = true;
       throw error;
     }
-
     const queryText = `
       DELETE FROM "${nomeSchemaDbDoRestaurante}".produtos 
       WHERE id = $1
@@ -221,16 +217,13 @@ const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
     `;
     const values = [idProdutoParaDeletar];
     const resultado = await db.query(queryText, values);
-
     if (resultado.rowCount === 0) {
       const error = new Error(`Produto com ID '${idProdutoParaDeletar}' não encontrado no schema '${nomeSchemaDbDoRestaurante}' para deleção.`);
       error.isNotFoundError = true;
       throw error;
     }
-
     console.log(`Service Produto: Produto ID ${idProdutoParaDeletar} deletado com sucesso do schema '${nomeSchemaDbDoRestaurante}'.`);
     return { message: `Produto ID ${idProdutoParaDeletar} deletado com sucesso.` };
-
   } catch (error) {
     if (error.isValidationError || error.isNotFoundError || error.isForeignKeyViolation) {
         throw error;
@@ -246,10 +239,45 @@ const removerProduto = async (nomeSchemaDbDoRestaurante, produtoId) => {
   }
 };
 
+// <<<--- NOVA FUNÇÃO PARA ATUALIZAR APENAS A FOTO DO PRODUTO
+const atualizarUrlFotoProduto = async (nomeSchemaDb, produtoId, imageUrl) => {
+    console.log(`Service: Atualizando url_foto para produto ID '${produtoId}' no schema '${nomeSchemaDb}'...`);
+    try {
+        const id = parseInt(produtoId, 10);
+        if (isNaN(id)) {
+            const error = new Error("ID do produto inválido.");
+            error.isValidationError = true;
+            throw error;
+        }
+
+        const queryText = `
+            UPDATE "${nomeSchemaDb}".produtos
+            SET url_foto = $1, data_atualizacao = NOW()
+            WHERE id = $2
+            RETURNING id, url_foto;
+        `;
+        const resultado = await db.query(queryText, [imageUrl, id]);
+
+        if (resultado.rowCount === 0) {
+            const error = new Error(`Produto com ID '${id}' não encontrado para atualizar a imagem.`);
+            error.isNotFoundError = true;
+            throw error;
+        }
+        return resultado.rows[0];
+    } catch (error) {
+        if (error.isValidationError || error.isNotFoundError) {
+            throw error;
+        }
+        console.error(`Service Error (atualizarUrlFotoProduto):`, error.message);
+        throw new Error('Erro no serviço ao atualizar a imagem do produto.');
+    }
+};
+
 module.exports = {
   criarNovoProduto,
   buscarProdutosPorRestaurante,
   buscarProdutoPorId,
   modificarProduto,
   removerProduto,
+  atualizarUrlFotoProduto,
 };

@@ -112,7 +112,6 @@ const atualizarProduto = async (req, res) => {
   }
 };
 
-// Função para deletar um produto existente (AGORA IMPLEMENTADA)
 const deletarProduto = async (req, res) => {
   try {
     const { restauranteId: restauranteIdDaUrl, produtoId } = req.params;
@@ -120,34 +119,71 @@ const deletarProduto = async (req, res) => {
 
     console.log(`Controller Produto: Deletando produto ID '${produtoId}' do restauranteId (URL): ${restauranteIdDaUrl}`);
 
-    // Verificação de Autorização
     if (restauranteAutenticado.restauranteId !== parseInt(restauranteIdDaUrl, 10)) {
       console.warn(`Controller Produto: Tentativa de DELETAR produto não autorizada. ID do Token: ${restauranteAutenticado.restauranteId}, ID da URL: ${restauranteIdDaUrl}`);
       return res.status(403).json({ message: 'Acesso proibido: você não tem permissão para deletar produtos deste restaurante.' });
     }
 
-    // Chamo o serviço para remover o produto.
     await produtoService.removerProduto(
         restauranteAutenticado.nomeSchemaDb, 
-        parseInt(produtoId, 10) // Garanto que produtoId é um número
+        parseInt(produtoId, 10)
     );
     
-    // Respondo com 204 No Content para DELETE bem-sucedido.
     res.status(204).send();
 
   } catch (error) {
     console.error('Controller Produto (Deletar) Error:', error.message);
 
-    if (error.isValidationError) { // ID do produto inválido
+    if (error.isValidationError) {
         return res.status(400).json({ message: error.message });
-    } else if (error.isNotFoundError) { // Produto não encontrado para deleção
+    } else if (error.isNotFoundError) {
         return res.status(404).json({ message: error.message });
-    } else if (error.isForeignKeyViolation) { // Produto associado a promoções
-        return res.status(409).json({ message: error.message }); // 409 Conflict
+    } else if (error.isForeignKeyViolation) {
+        return res.status(409).json({ message: error.message });
     } else {
       return res.status(500).json({ message: 'Erro interno no servidor ao tentar deletar o produto.' });
     }
   }
+};
+
+// <<<--- NOVO MÉTODO PARA UPLOAD DE IMAGEM DO PRODUTO
+const uploadImagemProduto = async (req, res) => {
+    try {
+        const { restauranteId, produtoId } = req.params;
+        const restauranteAutenticado = req.restauranteAutenticado;
+
+        // Verificação de segurança
+        if (restauranteAutenticado.restauranteId !== parseInt(restauranteId, 10)) {
+            return res.status(403).json({ message: 'Acesso negado.' });
+        }
+
+        // Verifica se o arquivo foi enviado
+        if (!req.file) {
+            return res.status(400).json({ message: 'Nenhum arquivo de imagem foi enviado.' });
+        }
+
+        // Constrói a URL pública da imagem
+        const imageUrl = `/uploads/produtos/${req.file.filename}`;
+
+        // Chama o serviço para salvar a URL no banco de dados
+        await produtoService.atualizarUrlFotoProduto(
+            restauranteAutenticado.nomeSchemaDb,
+            produtoId,
+            imageUrl
+        );
+
+        res.status(200).json({
+            message: 'Imagem do produto atualizada com sucesso!',
+            url_foto: imageUrl,
+        });
+
+    } catch (error) {
+        console.error('Controller: Erro ao fazer upload da imagem do produto:', error.message);
+        if (error.isNotFoundError) {
+            return res.status(404).json({ message: error.message });
+        }
+        res.status(500).json({ message: 'Erro interno no servidor ao processar o upload da imagem.' });
+    }
 };
 
 module.exports = {
@@ -155,5 +191,6 @@ module.exports = {
   listarProdutos,
   obterProdutoPorId,
   atualizarProduto,
-  deletarProduto, // Função agora implementada e exportada
+  deletarProduto,
+  uploadImagemProduto,
 };

@@ -3,8 +3,8 @@ const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { z } = require('zod');
 
-// Schema Zod para o restaurante
-const restauranteSchema = z.object({
+// Schema Zod para a CRIAÇÃO de um restaurante
+const restauranteCreateSchema = z.object({
   identificador_url: z.string().min(3).regex(/^[a-z0-9_]+$/),
   nome_fantasia: z.string().min(2),
   email_responsavel: z.string().email(),
@@ -19,12 +19,24 @@ const restauranteSchema = z.object({
   cor_secundaria_hex: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/).optional().nullable(),
 });
 
+// Schema Zod para ATUALIZAÇÃO dos dados do restaurante
+const restauranteUpdateSchema = z.object({
+  nome_fantasia: z.string().min(2),
+  razao_social: z.string().min(2).optional().nullable(),
+  cnpj: z.string().regex(/^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/, "Formato de CNPJ inválido.").optional().nullable(),
+  endereco_completo: z.string().min(5).optional().nullable(),
+  telefone_contato: z.string().min(8).optional().nullable(),
+  path_logo: z.string().url().optional().nullable(),
+  cor_primaria_hex: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/).optional().nullable(),
+  cor_secundaria_hex: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/).optional().nullable(),
+}).partial();
+
 
 const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
   console.log('Service Restaurante: Tentando criar restaurante com dados brutos:', dadosBrutosRestaurante);
 
   try {
-    const dadosRestaurante = restauranteSchema.parse(dadosBrutosRestaurante);
+    const dadosRestaurante = restauranteCreateSchema.parse(dadosBrutosRestaurante);
     console.log('Service Restaurante: Dados validados pelo Zod:', dadosRestaurante);
 
     const {
@@ -185,6 +197,108 @@ const criarNovoRestaurante = async (dadosBrutosRestaurante) => {
   }
 };
 
+const buscarRestaurantePorId = async (restauranteId) => {
+  console.log(`Service: Buscando restaurante ID '${restauranteId}'...`);
+  try {
+    const id = parseInt(restauranteId, 10);
+    const queryText = `
+      SELECT id, identificador_url, nome_fantasia, razao_social, cnpj, endereco_completo, 
+             telefone_contato, path_logo, cor_primaria_hex, cor_secundaria_hex, 
+             email_responsavel, nome_schema_db, ativo, data_criacao, data_atualizacao 
+      FROM public.restaurantes WHERE id = $1;
+    `;
+    const resultado = await db.query(queryText, [id]);
+
+    if (resultado.rowCount === 0) {
+      return null;
+    }
+    return resultado.rows[0];
+  } catch (error) {
+    console.error(`Service Error (buscarRestaurantePorId):`, error.message);
+    throw new Error('Erro no serviço ao buscar dados do restaurante.');
+  }
+};
+
+const modificarRestaurante = async (restauranteId, dadosBrutosUpdate) => {
+  console.log(`Service: Modificando restaurante ID '${restauranteId}'...`);
+  try {
+    const dadosUpdate = restauranteUpdateSchema.parse(dadosBrutosUpdate);
+    const camposParaAtualizar = Object.keys(dadosUpdate);
+
+    if (camposParaAtualizar.length === 0) {
+      const error = new Error('Nenhum dado válido fornecido para atualização.');
+      error.isZodError = true;
+      throw error;
+    }
+
+    const setClauses = camposParaAtualizar.map((key, index) => `${key} = $${index + 1}`);
+    const values = camposParaAtualizar.map(key => dadosUpdate[key]);
+    
+    const id = parseInt(restauranteId, 10);
+    values.push(id);
+
+    const queryText = `
+      UPDATE public.restaurantes 
+      SET ${setClauses.join(', ')}, data_atualizacao = NOW() 
+      WHERE id = $${values.length}
+      RETURNING *;
+    `;
+
+    const resultado = await db.query(queryText, values);
+
+    if (resultado.rowCount === 0) {
+      const error = new Error(`Restaurante com ID '${restauranteId}' não encontrado.`);
+      error.isNotFoundError = true;
+      throw error;
+    }
+    
+    const restauranteAtualizado = resultado.rows[0];
+    delete restauranteAtualizado.hash_senha_responsavel;
+
+    return restauranteAtualizado;
+  } catch (error) {
+    if (error instanceof z.ZodError || error.isZodError) {
+      const formattedErrors = error.issues ? error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') : error.message;
+      const validationError = new Error(`Erro de validação: ${formattedErrors}`);
+      validationError.isZodError = true;
+      throw validationError;
+    }
+    if (error.isNotFoundError) throw error;
+    
+    console.error(`Service Error (modificarRestaurante):`, error.message);
+    throw new Error('Erro no serviço ao atualizar dados do restaurante.');
+  }
+};
+
+// <<<--- NOVA FUNÇÃO PARA ATUALIZAR APENAS A LOGO
+const atualizarPathLogo = async (restauranteId, logoUrl) => {
+  console.log(`Service: Atualizando path_logo para restaurante ID '${restauranteId}'...`);
+  try {
+    const id = parseInt(restauranteId, 10);
+    const queryText = `
+      UPDATE public.restaurantes 
+      SET path_logo = $1, data_atualizacao = NOW() 
+      WHERE id = $2
+      RETURNING path_logo;
+    `;
+    const resultado = await db.query(queryText, [logoUrl, id]);
+
+    if (resultado.rowCount === 0) {
+      const error = new Error(`Restaurante com ID '${restauranteId}' não encontrado para atualizar a logo.`);
+      error.isNotFoundError = true;
+      throw error;
+    }
+    return resultado.rows[0];
+  } catch (error) {
+    console.error(`Service Error (atualizarPathLogo):`, error.message);
+    throw new Error('Erro no serviço ao atualizar a logo do restaurante.');
+  }
+};
+
+
 module.exports = {
   criarNovoRestaurante,
+  buscarRestaurantePorId,
+  modificarRestaurante,
+  atualizarPathLogo,
 };

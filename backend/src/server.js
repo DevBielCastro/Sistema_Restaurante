@@ -3,11 +3,13 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const path = require('path');
 
 // Importo o módulo de conexão com o banco e nossas rotas
 const db = require('./config/db');
 const restauranteRoutes = require('./api/restaurantes.routes');
-const authRoutes = require('./api/auth.routes'); // Importa as rotas de autenticação
+const authRoutes = require('./api/auth.routes');
+const publicRoutes = require('./api/public.routes'); // <<< ADICIONADO
 
 const app = express();
 
@@ -16,12 +18,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Torna a pasta 'public' acessível. Ex: http://localhost:3001/uploads/logos/arquivo.png
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
+
 // Defino minhas rotas
 app.get('/', (req, res) => { // Rota raiz para health check
   res.json({ message: 'API da Plataforma de Cardápios Online operacional!' });
 });
-app.use('/api/v1/restaurantes', restauranteRoutes); // Monto as rotas de restaurantes
-app.use('/api/v1/auth', authRoutes); // Monto as rotas de autenticação
+// Rotas Protegidas
+app.use('/api/v1/restaurantes', restauranteRoutes);
+app.use('/api/v1/auth', authRoutes);
+// Rotas Públicas
+app.use('/api/v1/public', publicRoutes); // <<< ADICIONADO
+
 
 const PORT = process.env.PORT || 3001;
 
