@@ -29,6 +29,20 @@ const restauranteUpdateSchema = z.object({
   path_logo: z.string().url().optional().nullable(),
   cor_primaria_hex: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/).optional().nullable(),
   cor_secundaria_hex: z.string().regex(/^#([0-9A-Fa-f]{3}){1,2}$/).optional().nullable(),
+  
+  // <<< CAMPOS ADICIONADOS PARA HORÁRIOS >>>
+  horario_abertura: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato de hora inválido. Use HH:MM.").optional().nullable(),
+  horario_fechamento: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato de hora inválido. Use HH:MM.").optional().nullable(),
+  dias_funcionamento: z.object({
+      dom: z.boolean(),
+      seg: z.boolean(),
+      ter: z.boolean(),
+      qua: z.boolean(),
+      qui: z.boolean(),
+      sex: z.boolean(),
+      sab: z.boolean(),
+  }).optional().nullable(),
+
 }).partial();
 
 
@@ -201,10 +215,12 @@ const buscarRestaurantePorId = async (restauranteId) => {
   console.log(`Service: Buscando restaurante ID '${restauranteId}'...`);
   try {
     const id = parseInt(restauranteId, 10);
+    // <<< CAMPOS DE HORÁRIO ADICIONADOS À QUERY
     const queryText = `
       SELECT id, identificador_url, nome_fantasia, razao_social, cnpj, endereco_completo, 
              telefone_contato, path_logo, cor_primaria_hex, cor_secundaria_hex, 
-             email_responsavel, nome_schema_db, ativo, data_criacao, data_atualizacao 
+             email_responsavel, nome_schema_db, ativo, data_criacao, data_atualizacao,
+             horario_abertura, horario_fechamento, dias_funcionamento
       FROM public.restaurantes WHERE id = $1;
     `;
     const resultado = await db.query(queryText, [id]);
@@ -232,7 +248,13 @@ const modificarRestaurante = async (restauranteId, dadosBrutosUpdate) => {
     }
 
     const setClauses = camposParaAtualizar.map((key, index) => `${key} = $${index + 1}`);
-    const values = camposParaAtualizar.map(key => dadosUpdate[key]);
+    const values = camposParaAtualizar.map(key => {
+        // Se o campo for 'dias_funcionamento', precisamos stringificar o objeto JSON
+        if (key === 'dias_funcionamento') {
+            return JSON.stringify(dadosUpdate[key]);
+        }
+        return dadosUpdate[key];
+    });
     
     const id = parseInt(restauranteId, 10);
     values.push(id);
@@ -270,7 +292,6 @@ const modificarRestaurante = async (restauranteId, dadosBrutosUpdate) => {
   }
 };
 
-// <<<--- NOVA FUNÇÃO PARA ATUALIZAR APENAS A LOGO
 const atualizarPathLogo = async (restauranteId, logoUrl) => {
   console.log(`Service: Atualizando path_logo para restaurante ID '${restauranteId}'...`);
   try {

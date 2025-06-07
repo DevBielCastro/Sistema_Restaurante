@@ -9,7 +9,7 @@ const path = require('path');
 const db = require('./config/db');
 const restauranteRoutes = require('./api/restaurantes.routes');
 const authRoutes = require('./api/auth.routes');
-const publicRoutes = require('./api/public.routes'); // <<< ADICIONADO
+const publicRoutes = require('./api/public.routes');
 
 const app = express();
 
@@ -18,8 +18,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Torna a pasta 'public' acessível. Ex: http://localhost:3001/uploads/logos/arquivo.png
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+// CORREÇÃO: Adicionado '../' para sair da pasta 'src' e encontrar a pasta 'public' na raiz.
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 
 // Defino minhas rotas
@@ -30,7 +30,7 @@ app.get('/', (req, res) => { // Rota raiz para health check
 app.use('/api/v1/restaurantes', restauranteRoutes);
 app.use('/api/v1/auth', authRoutes);
 // Rotas Públicas
-app.use('/api/v1/public', publicRoutes); // <<< ADICIONADO
+app.use('/api/v1/public', publicRoutes);
 
 
 const PORT = process.env.PORT || 3001;
